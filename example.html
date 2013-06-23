@@ -1,0 +1,66 @@
+<!doctype html>
+<html>
+<head>
+  <title>Media Sources Example</title>
+  <link href="http://vjs.zencdn.net/4.0/video-js.css" rel="stylesheet">
+
+  <script src="video-js/src/js/core.js"></script>
+  <script src="video-js/src/js/core-object.js"></script>
+  <script src="video-js/src/js/events.js"></script>
+  <script src="video-js/src/js/lib.js"></script>
+  <script src="video-js/src/js/component.js"></script>
+  <script src="video-js/src/js/button.js"></script>
+  <script src="video-js/src/js/slider.js"></script>
+  <script src="video-js/src/js/menu.js"></script>
+  <script src="video-js/src/js/player.js"></script>
+  <script src="video-js/src/js/control-bar/control-bar.js"></script>
+  <script src="video-js/src/js/control-bar/play-toggle.js"></script>
+  <script src="video-js/src/js/control-bar/time-display.js"></script>
+  <script src="video-js/src/js/control-bar/fullscreen-toggle.js"></script>
+  <script src="video-js/src/js/control-bar/progress-control.js"></script>
+  <script src="video-js/src/js/control-bar/volume-control.js"></script>
+  <script src="video-js/src/js/control-bar/mute-toggle.js"></script>
+  <script src="video-js/src/js/control-bar/volume-menu-button.js"></script>
+  <script src="video-js/src/js/poster.js"></script>
+  <script src="video-js/src/js/loading-spinner.js"></script>
+  <script src="video-js/src/js/big-play-button.js"></script>
+  <script src="video-js/src/js/media/media.js"></script>
+  <script src="video-js/src/js/media/html5.js"></script>
+  <script src="video-js/src/js/media/flash.js"></script>
+  <script src="video-js/src/js/media/loader.js"></script>
+  <script src="video-js/src/js/tracks.js"></script>
+  <script src="video-js/src/js/json.js"></script>
+  <script src="video-js/src/js/setup.js"></script>
+  <script src="video-js/src/js/plugins.js"></script>
+</head>
+<body>
+  <video id='video' class="video-js vjs-default-skin" height=300 width=600 controls></video>
+  <script src="videojs-media-sources.js"></script>
+  <script>
+  var video,
+      req = new XMLHttpRequest();
+
+  videojs.options.flash.swf = "video-js.swf";
+
+  video = videojs('video');
+
+  req.open('GET', 'oceans.flv', true);
+  req.responseType = 'arraybuffer';
+  req.onload = function(){
+    var mediaSource = new videojs.MediaSource(),
+        bytes = new Uint8Array(req.response);
+
+    mediaSource.on('sourceopen', function(event){
+      var sourceBuffer = mediaSource.addSourceBuffer('video/flv; codecs="vp6,aac"');
+      sourceBuffer.appendBuffer(bytes, video);
+    });
+
+    video.src({ 
+      src: videojs.URL.createObjectURL(mediaSource), 
+      type: "video/flv"
+    });
+  };
+  req.send(null);
+  </script>
+</body>
+</html>
