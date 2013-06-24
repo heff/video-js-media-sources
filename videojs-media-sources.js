@@ -1,50 +1,67 @@
-(function(){
-  var urlCount = 0;
+(function(window){
+  var urlCount = 0,
+      nativeMediaSource = window.MediaSource || window.WebKitMediaSource || {},
+      nativeUrl = window.URL || {},
+      flvCodec = /video\/flv; codecs=["']vp6,aac["']/;
 
-  // MediaSource
+
+  // extend the media source APIs
+
+  // Media Source
   videojs.MediaSource = function(){
     var self = this;
     this.sourceBuffers = [];
-    this.listeners = {};
-    setTimeout(function(){
-      self.trigger('sourceopen');
-    }, 0)
+    this.listeners = {
+      sourceopen: [function(event){
+        self.player = document.getElementById(event.playerId);
+      }]
+    };
   };
+  videojs.MediaSource.sourceBufferUrls = {};
   videojs.MediaSource.prototype = {
     addSourceBuffer: function(type){
-      var sourceBuffer = new videojs.SourceBuffer();
+      var self = this,
+          sourceBuffer;
+      if (flvCodec.test(type)) {
+	sourceBuffer = new videojs.SourceBuffer(this);
+      } else {
+	sourceBuffer = this.prototype.prototype.addSourceBuffer.call(this, arguments);
+      }
       this.sourceBuffers.push(sourceBuffer);
       return sourceBuffer;
     },
-    on: function(type, listener){
+    addEventListener: function(type, listener){
       if (!this.listeners[type]) {
         this.listeners[type] = [];
       }
-      this.listeners[type].push(listener);
+      this.listeners[type].unshift(listener);
     },
-    trigger: function(type){
-      var listeners = this.listeners[type], i = listeners.length;
+    trigger: function(event){
+      var listeners = this.listeners[event.type] || [],
+          i = listeners.length;
       while (i--) {
-        listeners[i]({ type: type });
+        listeners[i](event);
       }
     }
   };
+  // setup delegation
+  videojs.MediaSource.prototype.prototype = nativeMediaSource;
 
   // SourceBuffer
-  videojs.SourceBuffer = function(){
+  videojs.SourceBuffer = function(source){
+    this.source = source;
     this.buffer = [];
   };
   videojs.SourceBuffer.prototype = {
-    appendBuffer: function(uint8Array, badPlayer){
-      var array = [], i = uint8Array.length;
+    appendBuffer: function(uint8Array){
+      var array = [], i = uint8Array.length, self = this;
       this.buffer.push(uint8Array);
       while (i--) {
         array[i] = uint8Array[i];
       }
-      badPlayer.ready(function(){
-        badPlayer.load();
-        badPlayer.tech.el().vjs_appendBuffer(array);
-      });
+      if (this.source.player) {
+        this.source.player.vjs_appendBuffer(array);
+      }
       this.trigger('update');
       this.trigger('updateend');
     },
@@ -62,13 +79,19 @@
   // URL
   videojs.URL = {
     createObjectURL: function(object){
-      var url = 'blob:vjs-source:' + urlCount;
+      var url = 'blob:vjs-source/' + urlCount;
       urlCount++;
+      videojs.MediaSource.sourceBufferUrls[url] = function(playerId){
+	console.log('got playerid', playerId);
+	object.trigger({
+	  type: 'sourceopen',
+	  playerId: playerId
+	});
+      };
       return url;
     }
   };
+  // setup delegation
+  videojs.URL.prototype = nativeUrl;
 
-  videojs.plugin('mediaSources', function(options){
-    var player = this;
-  });
-})();
+})(this);
