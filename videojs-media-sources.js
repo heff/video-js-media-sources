@@ -14,6 +14,8 @@
     this.listeners = {
       sourceopen: [function(event){
         self.player = document.getElementById(event.playerId);
+        // trigger load events
+        self.player.vjs_load();
       }]
     };
   };
