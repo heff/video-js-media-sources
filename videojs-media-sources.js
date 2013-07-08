@@ -1,9 +1,9 @@
 (function(window){
   var urlCount = 0,
-      nativeMediaSource = window.MediaSource || window.WebKitMediaSource || {},
+      NativeMediaSource = window.MediaSource || window.WebKitMediaSource || {},
       nativeUrl = window.URL || {},
-      flvCodec = /video\/flv; codecs=["']vp6,aac["']/;
-
+      flvCodec = /video\/flv; codecs=["']vp6,aac["']/,
+      objectUrlPrefix = 'blob:vjs-source/';
 
   // extend the media source APIs
 
@@ -11,23 +11,34 @@
   videojs.MediaSource = function(){
     var self = this;
     this.sourceBuffers = [];
+    this.readyState = 'closed';
     this.listeners = {
       sourceopen: [function(event){
         self.player = document.getElementById(event.playerId);
+        self.readyState = 'open';
+        
         // trigger load events
-        self.player.vjs_load();
+        if (self.player) {
+          self.player.vjs_load();
+        }
+      }],
+      webkitsourceopen: [function(event){
+        self.trigger({
+          type: 'sourceopen'
+        });
       }]
     };
   };
   videojs.MediaSource.sourceBufferUrls = {};
   videojs.MediaSource.prototype = {
     addSourceBuffer: function(type){
-      var self = this,
-          sourceBuffer;
+      var sourceBuffer;
       if (flvCodec.test(type)) {
-	sourceBuffer = new videojs.SourceBuffer(this);
+        // Flash source buffers
+        sourceBuffer = new videojs.SourceBuffer(this);
       } else {
-	sourceBuffer = this.prototype.prototype.addSourceBuffer.call(this, arguments);
+        // native source buffers
+        sourceBuffer = this.nativeSource.addSourceBuffer.apply(this.nativeSource, arguments);
       }
       this.sourceBuffers.push(sourceBuffer);
       return sourceBuffer;
@@ -38,6 +49,9 @@
       }
       this.listeners[type].unshift(listener);
     },
+    endOfStream: function(){
+      this.readyState = 'ended';
+    },
     trigger: function(event){
       var listeners = this.listeners[event.type] || [],
           i = listeners.length;
@@ -46,8 +60,6 @@
       }
     }
   };
-  // setup delegation
-  videojs.MediaSource.prototype.prototype = nativeMediaSource;
 
   // SourceBuffer
   videojs.SourceBuffer = function(source){
@@ -81,19 +93,48 @@
   // URL
   videojs.URL = {
     createObjectURL: function(object){
-      var url = 'blob:vjs-source/' + urlCount;
+      var url = objectUrlPrefix + urlCount,
+          triggerSourceOpen = function(playerId){
+	    object.trigger({
+	      type: 'sourceopen',
+	      playerId: playerId
+	    });
+          };
       urlCount++;
-      videojs.MediaSource.sourceBufferUrls[url] = function(playerId){
-	console.log('got playerid', playerId);
-	object.trigger({
-	  type: 'sourceopen',
-	  playerId: playerId
-	});
-      };
+
+      // setup the mapping back to object
+      videojs.MediaSource.sourceBufferUrls[url] = triggerSourceOpen;
+      triggerSourceOpen.object = object;
+
       return url;
     }
   };
-  // setup delegation
-  videojs.URL.prototype = nativeUrl;
+
+  // plugin
+  videojs.plugin('mediaSource', function(options) {
+    var player = this;
+    player.on('loadstart', function() {
+      var url = player.currentSrc(),
+          trigger = function(event){
+            mediaSource.trigger(event);
+          },
+          mediaSource;
+
+      if (player.techName === 'Html5' && url.indexOf(objectUrlPrefix) === 0) {
+        // use the native media source implementation
+        mediaSource = videojs.MediaSource.sourceBufferUrls[url].object;
+
+        if (!mediaSource.nativeUrl) {
+          // initialize the native source
+          mediaSource.nativeSource = new NativeMediaSource();
+          mediaSource.nativeSource.addEventListener('sourceopen', trigger, false);
+          mediaSource.nativeSource.addEventListener('webkitsourceopen', trigger, false);
+          mediaSource.nativeUrl = nativeUrl.createObjectURL(mediaSource.nativeSource);
+          
+        }
+        player.src(mediaSource.nativeUrl);
+      }
+    });
+  });
 
 })(this);
